@@ -1,0 +1,128 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  password      String?
+  emailVerified DateTime?
+  image         String?
+  accounts      Account[]
+  sessions      Session[]
+  projects      Project[]
+  yarns         Yarn[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@map("users")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+model Project {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  status      String   @default("in_progress")
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  yarns       Yarn[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("projects")
+}
+
+model Yarn {
+  id           String        @id @default(cuid())
+  name         String
+  brand        String
+  color        String?
+  weight       String
+  fiber        String
+  dyeingStatus String       @default("UNKNOWN")
+  quantity     Float        @default(0)
+  unit         String       @default("grams")
+  notes        String?      @db.Text
+  userId       String
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projects     Project[]
+  photos       YarnPhoto[]
+  tags         YarnTag[]
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@map("yarns")
+}
+
+model YarnPhoto {
+  id        String   @id @default(cuid())
+  url       String
+  yarnId    String
+  yarn      Yarn     @relation(fields: [yarnId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("yarn_photos")
+}
+
+model YarnTag {
+  id        String   @id @default(cuid())
+  name      String
+  yarnId    String
+  yarn      Yarn     @relation(fields: [yarnId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("yarn_tags")
+}
