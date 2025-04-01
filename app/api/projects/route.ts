@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
     }
 
     const data = await request.json();
-    const { name, description, status } = data;
+    const { name, description, status, yarnIds } = data;
 
     if (!name) {
       return NextResponse.json({ error: "Name is required" }, { status: 400 });
@@ -92,8 +92,13 @@ export async function POST(request: NextRequest) {
       data: {
         name,
         description,
-        status: status || "in_progress",
+        status: status || "planned",
         userId: session.user.id,
+        ...(yarnIds && yarnIds.length > 0 && {
+          yarns: {
+            connect: yarnIds.map((id: string) => ({ id })),
+          },
+        }),
       },
       include: {
         yarns: true,

@@ -37,17 +37,27 @@ export async function GET(request: NextRequest) {
       ...(search && {
         OR: [
           {
-            name: {
-              contains: search,
-            },
-          },
-          {
             brand: {
               contains: search,
             },
           },
           {
-            color: {
+            productLine: {
+              contains: search,
+            },
+          },
+          {
+            prevColor: {
+              contains: search,
+            },
+          },
+          {
+            currColor: {
+              contains: search,
+            },
+          },
+          {
+            nextColor: {
               contains: search,
             },
           },
@@ -61,6 +71,12 @@ export async function GET(request: NextRequest) {
         include: {
           photos: true,
           tags: true,
+          projects: true,
+          organization: {
+            include: {
+              type: true
+            }
+          }
         },
         orderBy: {
           updatedAt: "desc",
@@ -94,36 +110,80 @@ export async function POST(request: NextRequest) {
     }
 
     const data = await request.json();
-    const { name, brand, color, weight, length, tags } = data;
+    const { 
+      brand, 
+      productLine, 
+      prevColor, 
+      currColor, 
+      nextColor, 
+      dyeStatus, 
+      materials, 
+      weight, 
+      yardsPerOz, 
+      totalWeight, 
+      totalYards, 
+      organization, 
+      tags 
+    } = data;
 
-    if (!name) {
-      return NextResponse.json({ error: "Name is required" }, { status: 400 });
+    if (!brand || !productLine) {
+      return NextResponse.json({ error: "Brand and product line are required" }, { status: 400 });
     }
 
+    const parsedTags = Array.isArray(tags) ? tags : (typeof tags === 'string' ? tags.split(',').map(tag => tag.trim()) : []);
+
+    // Create the yarn record first
     const yarn = await prisma.yarn.create({
       data: {
-        name,
         brand,
-        color,
+        productLine,
+        prevColor,
+        currColor,
+        nextColor,
+        dyeStatus,
+        materials,
         weight,
-        length,
+        yardsPerOz,
+        totalWeight,
+        totalYards,
         userId: session.user.id,
-        ...(tags && {
+        ...(parsedTags.length > 0 && {
           tags: {
-            connectOrCreate: tags.map((tag: string) => ({
-              where: { name: tag },
-              create: { name: tag },
+            create: parsedTags.map((tag: string) => ({
+              name: tag,
             })),
           },
         }),
       },
+    });
+
+    // If organization data is provided, create the organization entries
+    if (organization && Array.isArray(organization) && organization.length > 0) {
+      await prisma.yarnOrganization.createMany({
+        data: organization.map(org => ({
+          typeId: org.typeId,
+          quantity: org.quantity,
+          yarnId: yarn.id,
+        })),
+      });
+    }
+
+    // Fetch the complete yarn data with all relations
+    const completeYarn = await prisma.yarn.findUnique({
+      where: { id: yarn.id },
       include: {
         photos: true,
         tags: true,
+        projects: true,
+        organization: {
+          include: {
+            type: true
+          }
+        }
       },
     });
 
-    return NextResponse.json(yarn);
+    return NextResponse.json(completeYarn);
   } catch (error) {
     console.error(error);
     return NextResponse.json(

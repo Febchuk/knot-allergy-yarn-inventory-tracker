@@ -43,7 +43,7 @@ export default function Home() {
                 <Box className="h-12 w-12 text-primary" />
                 <h3 className="text-xl font-bold">Inventory Management</h3>
                 <p className="text-gray-500 dark:text-gray-400">
-                  Track your yarn stash with detailed information about weight, color, and quantity.
+                  Track your yarn stash with detailed information about brand, product line, materials, weight, and yardage.
                 </p>
               </div>
               <div className="flex flex-col justify-center items-center text-center space-y-4">

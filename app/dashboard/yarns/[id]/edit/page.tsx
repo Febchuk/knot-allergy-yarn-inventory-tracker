@@ -1,69 +1,119 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { toast } from "sonner";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
-import { z } from "zod";
-import { DyeStatus } from "../../../lib/schemas/yarn";
+import { ArrowLeft } from "lucide-react";
 
-// Define our own schema to match the form exactly
-const formSchema = z.object({
+// We'll use a similar schema as the one in lib/schemas/yarn.ts but for client-side validation
+const DyeStatus = {
+  NOT_TO_BE_DYED: "NOT_TO_BE_DYED",
+  TO_BE_DYED: "TO_BE_DYED",
+  HAS_BEEN_DYED: "HAS_BEEN_DYED",
+} as const;
+
+const yarnSchema = z.object({
   brand: z.string().min(1, "Brand is required"),
   productLine: z.string().min(1, "Product line is required"),
   prevColor: z.string().optional().nullable(),
   currColor: z.string().optional().nullable(),
   nextColor: z.string().optional().nullable(),
-  dyeStatus: z.enum([DyeStatus.NOT_TO_BE_DYED, DyeStatus.TO_BE_DYED, DyeStatus.HAS_BEEN_DYED])
-    .default(DyeStatus.NOT_TO_BE_DYED),
+  dyeStatus: z.enum([DyeStatus.NOT_TO_BE_DYED, DyeStatus.TO_BE_DYED, DyeStatus.HAS_BEEN_DYED]),
   materials: z.string().min(1, "Materials are required"),
   weight: z.number().int().min(1).max(7),
   yardsPerOz: z.string().regex(/^\d+(\.\d+)?\/\d+(\.\d+)?$/, "Must be in format XX/XX e.g. 367/4.9"),
   totalWeight: z.number().positive("Total weight must be positive"),
   totalYards: z.number().positive("Total yards must be positive"),
-  organization: z.array(z.object({
-    typeId: z.string(),
+  organizationData: z.array(z.object({
+    typeId: z.string().min(1, "Organization type is required"),
     quantity: z.number().int().positive("Quantity must be positive"),
   })),
   tags: z.string().optional(),
 });
 
-type FormValues = z.infer<typeof formSchema>;
+type YarnFormValues = z.infer<typeof yarnSchema>;
 
 type YarnOrganizationType = {
   id: string;
   name: string;
 };
 
-export default function NewYarnPage() {
+export default function EditYarnPage({ params }: { params: { id: string } }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [organizationTypes, setOrganizationTypes] = useState<YarnOrganizationType[]>([]);
-  
-  const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<FormValues>({
-    resolver: zodResolver(formSchema),
+  const [isLoading, setIsLoading] = useState(true);
+
+  const { register, handleSubmit, setValue, watch, formState: { errors }, reset } = useForm<YarnFormValues>({
+    resolver: zodResolver(yarnSchema),
     defaultValues: {
       dyeStatus: DyeStatus.NOT_TO_BE_DYED,
-      organization: [],
+      organizationData: [],
     },
   });
 
+  // Fetch the yarn data and organization types
   useEffect(() => {
-    // Fetch organization types
-    fetch("/api/yarn-organization-types")
-      .then(res => res.json())
-      .then(data => setOrganizationTypes(data))
-      .catch(error => {
-        console.error("Failed to fetch organization types:", error);
-        toast.error("Failed to load organization types");
-      });
-  }, []);
+    const fetchData = async () => {
+      setIsLoading(true);
+      try {
+        // Fetch organization types
+        const typesResponse = await fetch("/api/yarn-organization-types");
+        if (!typesResponse.ok) throw new Error("Failed to fetch organization types");
+        const typesData = await typesResponse.json();
+        setOrganizationTypes(typesData);
+
+        // Fetch yarn data
+        const yarnResponse = await fetch(`/api/yarn/${params.id}`);
+        if (!yarnResponse.ok) {
+          if (yarnResponse.status === 404) {
+            toast.error("Yarn not found");
+            router.push("/dashboard/yarns");
+            return;
+          }
+          throw new Error("Failed to fetch yarn");
+        }
+        
+        const yarnData = await yarnResponse.json();
+        
+        // Convert the data to the form format
+        reset({
+          brand: yarnData.brand,
+          productLine: yarnData.productLine,
+          prevColor: yarnData.prevColor,
+          currColor: yarnData.currColor,
+          nextColor: yarnData.nextColor,
+          dyeStatus: yarnData.dyeStatus,
+          materials: yarnData.materials,
+          weight: yarnData.weight,
+          yardsPerOz: yarnData.yardsPerOz,
+          totalWeight: yarnData.totalWeight,
+          totalYards: yarnData.totalYards,
+          organizationData: yarnData.organization?.map((org: { typeId: string; quantity: number }) => ({
+            typeId: org.typeId,
+            quantity: org.quantity,
+          })) || [],
+          tags: yarnData.tags?.map((tag: { name: string }) => tag.name).join(", "),
+        });
+      } catch (error) {
+        console.error("Error fetching data:", error);
+        toast.error("Failed to load yarn data");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [params.id, reset, router]);
 
   // Handle color arrow notation automatically
   const handleColorChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -80,32 +130,37 @@ export default function NewYarnPage() {
     }
   };
 
+  const organizationData = watch("organizationData") || [];
+
   const handleOrganizationAdd = () => {
-    const currentOrganization = watch("organization") || [];
-    setValue("organization", [
-      ...currentOrganization,
+    setValue("organizationData", [
+      ...organizationData,
       { typeId: "", quantity: 1 }
     ]);
   };
 
   const handleOrganizationRemove = (index: number) => {
-    const currentOrganization = watch("organization") || [];
-    setValue("organization", currentOrganization.filter((_, i) => i !== index));
+    setValue("organizationData", organizationData.filter((_, i) => i !== index));
   };
 
-  async function onSubmit(data: FormValues) {
+  async function onSubmit(data: YarnFormValues) {
     setLoading(true);
 
     try {
-      // Create a new object for the API submission
+      // Convert tags string to array or empty array
+      const tagsArray = data.tags?.split(",").map(tag => tag.trim()).filter(Boolean) || [];
+      
+      // Prepare data for API
+      const { organizationData, ...rest } = data;
+      
       const apiData = {
-        ...data,
-        // Convert tags string to array
-        tags: data.tags?.split(',').map(tag => tag.trim()).filter(Boolean) || [],
+        ...rest,
+        tags: tagsArray,
+        organization: organizationData,
       };
 
-      const response = await fetch("/api/yarn", {
-        method: "POST",
+      const response = await fetch(`/api/yarn/${params.id}`, {
+        method: "PATCH",
         headers: {
           "Content-Type": "application/json",
         },
@@ -113,32 +168,47 @@ export default function NewYarnPage() {
       });
 
       if (!response.ok) {
-        // Try to get error message from response
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || "Failed to create yarn");
+        throw new Error("Failed to update yarn");
       }
 
-      toast.success("Yarn added successfully");
-      router.push("/dashboard/yarns");
+      toast.success("Yarn updated successfully");
+      router.push(`/dashboard/yarns/${params.id}`);
       router.refresh();
     } catch (error) {
-      console.error("Error creating yarn:", error);
-      toast.error(error instanceof Error ? error.message : "Something went wrong");
+      toast.error("Something went wrong");
+      console.error(error);
     } finally {
       setLoading(false);
     }
   }
 
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+          <p className="mt-4 text-muted-foreground">Loading yarn data...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-2xl space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-3xl font-bold tracking-tight">Add New Yarn</h2>
+      <div className="flex items-center space-x-4">
+        <Link href={`/dashboard/yarns/${params.id}`}>
+          <Button variant="outline" size="icon">
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+        </Link>
+        <h2 className="text-3xl font-bold tracking-tight">Edit Yarn</h2>
       </div>
+      
       <Card>
         <CardHeader>
           <CardTitle>Yarn Details</CardTitle>
           <CardDescription>
-            Enter the details of your new yarn.
+            Update the details of your yarn.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -195,8 +265,9 @@ export default function NewYarnPage() {
             <div className="space-y-2">
               <Label htmlFor="dyeStatus">Dye Status</Label>
               <Select
-                onValueChange={(value: DyeStatus) => setValue("dyeStatus", value)}
-                defaultValue={DyeStatus.NOT_TO_BE_DYED}
+                onValueChange={(value) => setValue("dyeStatus", value as keyof typeof DyeStatus)}
+                defaultValue={watch("dyeStatus")}
+                value={watch("dyeStatus")}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select dye status" />
@@ -227,7 +298,6 @@ export default function NewYarnPage() {
                   type="number"
                   min="1"
                   max="7"
-                  defaultValue="1"
                   {...register("weight", { valueAsNumber: true })}
                 />
                 {errors.weight && (
@@ -278,17 +348,17 @@ export default function NewYarnPage() {
                   Add Organization
                 </Button>
               </div>
-              {watch("organization")?.map((org, index) => (
+              {organizationData.map((_, index) => (
                 <div key={index} className="flex items-end gap-4">
                   <div className="flex-1 space-y-2">
                     <Label>Type</Label>
                     <Select
                       onValueChange={(value) => {
-                        const org = [...watch("organization")];
+                        const org = [...organizationData];
                         org[index].typeId = value;
-                        setValue("organization", org);
+                        setValue("organizationData", org);
                       }}
-                      value={watch(`organization.${index}.typeId`)}
+                      value={organizationData[index].typeId}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Select type" />
@@ -307,7 +377,12 @@ export default function NewYarnPage() {
                     <Input
                       type="number"
                       min="1"
-                      {...register(`organization.${index}.quantity` as const, { valueAsNumber: true })}
+                      value={organizationData[index].quantity}
+                      onChange={(e) => {
+                        const org = [...organizationData];
+                        org[index].quantity = parseInt(e.target.value);
+                        setValue("organizationData", org);
+                      }}
                     />
                   </div>
                   <Button
@@ -319,9 +394,6 @@ export default function NewYarnPage() {
                   </Button>
                 </div>
               ))}
-              {errors.organization && (
-                <p className="text-sm text-red-500">{errors.organization.message}</p>
-              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="tags">Tags</Label>
@@ -331,9 +403,14 @@ export default function NewYarnPage() {
                 placeholder="Enter tags (comma separated)"
               />
             </div>
-            <Button type="submit" disabled={loading}>
-              {loading ? "Adding..." : "Add Yarn"}
-            </Button>
+            <div className="flex justify-end space-x-4 pt-4">
+              <Link href={`/dashboard/yarns/${params.id}`}>
+                <Button variant="outline" type="button">Cancel</Button>
+              </Link>
+              <Button type="submit" disabled={loading}>
+                {loading ? "Saving..." : "Save Changes"}
+              </Button>
+            </div>
           </form>
         </CardContent>
       </Card>

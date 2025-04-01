@@ -35,27 +35,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
-    const yarn = await prisma.yarn.findUnique({
-      where: {
-        id: yarnId,
-        userId: session.user.id,
-      },
-    });
-
-    if (!yarn) {
-      return NextResponse.json({ error: "Yarn not found" }, { status: 404 });
-    }
-
-    await prisma.project.update({
-      where: {
-        id,
-      },
+    const yarn = await prisma.yarn.update({
+      where: { id: yarnId },
       data: {
-        yarns: {
-          connect: {
-            id: yarnId,
-          },
+        projects: {
+          connect: { id: project.id }
         },
+        totalWeight: 0,
+        totalYards: 0,
       },
     });
 

@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -19,15 +13,14 @@ model Account {
   type              String
   provider          String
   providerAccountId String
-  refresh_token     String? @db.Text
-  access_token      String? @db.Text
+  refresh_token     String?
+  access_token      String?
   expires_at        Int?
   token_type        String?
   scope             String?
-  id_token          String? @db.Text
+  id_token          String?
   session_state     String?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
   @@map("accounts")
@@ -44,18 +37,19 @@ model Session {
 }
 
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String?   @unique
-  password      String?
-  emailVerified DateTime?
-  image         String?
-  accounts      Account[]
-  sessions      Session[]
-  projects      Project[]
-  yarns         Yarn[]
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id                String                 @id @default(cuid())
+  name              String?
+  email             String?                @unique
+  password          String?
+  emailVerified     DateTime?
+  image             String?
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  accounts          Account[]
+  projects          Project[]
+  sessions          Session[]
+  organizationTypes YarnOrganizationType[]
+  yarns             Yarn[]
 
   @@map("users")
 }
@@ -75,32 +69,35 @@ model Project {
   description String?
   status      String   @default("in_progress")
   userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  yarns       Yarn[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  yarns       Yarn[]   @relation("ProjectToYarn")
 
   @@map("projects")
 }
 
 model Yarn {
-  id           String        @id @default(cuid())
-  name         String
+  id           String             @id @default(cuid())
   brand        String
-  color        String?
-  weight       String
-  fiber        String
-  dyeingStatus String       @default("UNKNOWN")
-  quantity     Float        @default(0)
-  unit         String       @default("grams")
-  notes        String?      @db.Text
   userId       String
-  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  projects     Project[]
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  materials    String
+  productLine  String
+  totalWeight  Float
+  totalYards   Float
+  yardsPerOz   String
+  weight       Int
+  currColor    String?
+  nextColor    String?
+  prevColor    String?
+  dyeStatus    DyeStatus          @default(NOT_TO_BE_DYED)
+  organization YarnOrganization[]
   photos       YarnPhoto[]
   tags         YarnTag[]
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projects     Project[]          @relation("ProjectToYarn")
 
   @@map("yarns")
 }
@@ -109,9 +106,9 @@ model YarnPhoto {
   id        String   @id @default(cuid())
   url       String
   yarnId    String
-  yarn      Yarn     @relation(fields: [yarnId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  yarn      Yarn     @relation(fields: [yarnId], references: [id], onDelete: Cascade)
 
   @@map("yarn_photos")
 }
@@ -120,9 +117,41 @@ model YarnTag {
   id        String   @id @default(cuid())
   name      String
   yarnId    String
-  yarn      Yarn     @relation(fields: [yarnId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  yarn      Yarn     @relation(fields: [yarnId], references: [id], onDelete: Cascade)
 
   @@map("yarn_tags")
+}
+
+model YarnOrganizationType {
+  id            String             @id @default(cuid())
+  name          String             @unique
+  isSystem      Boolean            @default(false)
+  userId        String?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  user          User?              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organizations YarnOrganization[]
+
+  @@map("yarn_organization_types")
+}
+
+model YarnOrganization {
+  id        String               @id @default(cuid())
+  typeId    String
+  quantity  Int
+  yarnId    String
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+  type      YarnOrganizationType @relation(fields: [typeId], references: [id])
+  yarn      Yarn                 @relation(fields: [yarnId], references: [id], onDelete: Cascade)
+
+  @@map("yarn_organizations")
+}
+
+enum DyeStatus {
+  NOT_TO_BE_DYED
+  TO_BE_DYED
+  HAS_BEEN_DYED
 }
