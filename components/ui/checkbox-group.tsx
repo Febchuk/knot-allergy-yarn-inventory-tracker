@@ -64,6 +64,7 @@ function CheckboxGroup({
   children,
   className,
 }: CheckboxGroupProps) {
+  console.log("CheckboxGroup received value:", value);
   return (
     <CheckboxGroupContext.Provider value={{ value, onValueChange }}>
       <div className={cn("space-y-2", className)}>{children}</div>
@@ -77,6 +78,8 @@ const ContextCheckboxItem = React.forwardRef<
   Omit<CheckboxItemProps, "checked" | "onCheckedChange"> & { value: string }
 >(({ value, ...props }, ref) => {
   const { value: groupValue, onValueChange } = React.useContext(CheckboxGroupContext)
+  
+  console.log("ContextCheckboxItem:", { value, isChecked: groupValue.includes(value), groupValue });
   
   return (
     <CheckboxItem
@@ -98,4 +101,4 @@ const ContextCheckboxItem = React.forwardRef<
 })
 ContextCheckboxItem.displayName = "ContextCheckboxItem"
 
-export { CheckboxGroup, CheckboxItem } 
+export { CheckboxGroup, ContextCheckboxItem as CheckboxItem } 

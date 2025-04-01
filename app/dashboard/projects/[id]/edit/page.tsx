@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CheckboxGroup, CheckboxItem } from "@/components/ui/checkbox-group";
+import { SearchableMultiSelect } from "@/components/ui/searchable-multi-select";
 import { ArrowLeft } from "lucide-react";
 
 // Project schema for form validation
@@ -200,45 +200,60 @@ export default function EditProjectPage({ params }: { params: { id: string } }) 
               </Select>
             </div>
             
-            {/* Yarn selection after status field */}
-            <div className="space-y-2">
-              <Label>Yarns for this Project</Label>
+            <div className="space-y-4">
+              <Label>Associated Yarns</Label>
               {yarnsLoading ? (
-                <div className="p-4 text-center">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+                <div className="text-center py-2">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto"></div>
                   <p className="mt-2 text-sm text-muted-foreground">Loading yarns...</p>
                 </div>
               ) : yarns.length > 0 ? (
-                <div className="border rounded-md p-4 space-y-2 max-h-60 overflow-y-auto">
-                  <CheckboxGroup
-                    value={getValues("yarnIds")}
-                    onValueChange={(values: string[]) => setValue("yarnIds", values)}
-                  >
-                    {yarns.map((yarn) => (
-                      <div key={yarn.id} className="flex items-start space-x-2">
-                        <CheckboxItem 
-                          id={`yarn-${yarn.id}`}
-                          value={yarn.id}
-                        />
-                        <div>
-                          <Label 
-                            htmlFor={`yarn-${yarn.id}`}
-                            className="font-medium cursor-pointer"
-                          >
-                            {yarn.brand} {yarn.productLine}
-                          </Label>
-                          {yarn.currColor && (
-                            <p className="text-sm text-muted-foreground">Color: {yarn.currColor}</p>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </CheckboxGroup>
-                </div>
+                <SearchableMultiSelect
+                  options={yarns.map(yarn => ({
+                    label: `${yarn.brand} ${yarn.productLine}`,
+                    value: yarn.id,
+                    description: yarn.currColor ? `Color: ${yarn.currColor}` : undefined
+                  }))}
+                  selected={getValues("yarnIds") || []}
+                  onChange={(values) => {
+                    setValue("yarnIds", values);
+                    
+                    // Force immediate update
+                    const apiData = {
+                      yarnIds: values
+                    };
+                    
+                    console.log("Sending immediate update with:", JSON.stringify(apiData));
+                    
+                    // Update yarns immediately
+                    fetch(`/api/projects/${params.id}`, {
+                      method: "PATCH",
+                      headers: {
+                        "Content-Type": "application/json",
+                      },
+                      body: JSON.stringify(apiData),
+                    })
+                      .then(response => response.json())
+                      .then(data => {
+                        console.log("Yarn update response:", JSON.stringify(data));
+                        toast.success("Yarn associations updated");
+                      })
+                      .catch(error => {
+                        console.error("Error updating yarns:", error);
+                        toast.error("Failed to update yarn associations");
+                      });
+                  }}
+                  placeholder="Select yarns..."
+                  emptyMessage="No yarns found"
+                  loading={yarnsLoading}
+                />
               ) : (
-                <p className="text-sm text-muted-foreground p-2 border rounded-md">
-                  No yarns available. <Link href="/dashboard/yarns/new" className="text-primary hover:underline">Add some yarns first</Link>.
-                </p>
+                <div className="text-center py-4 border rounded-md">
+                  <p className="text-sm text-muted-foreground">No yarns available</p>
+                  <Link href="/dashboard/yarns/new" className="text-sm text-primary hover:underline mt-2 inline-block">
+                    Add a yarn
+                  </Link>
+                </div>
               )}
             </div>
             

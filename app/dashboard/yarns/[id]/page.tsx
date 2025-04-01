@@ -1,6 +1,6 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/options";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -8,8 +8,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Edit, Tag, Calendar, Pencil, Box } from "lucide-react";
 
-// Create a fresh Prisma client instance
-const prisma = new PrismaClient();
+// Disable caching - force revalidation on every request
+export const revalidate = 0;
 
 const dyeStatusMap = {
   NOT_TO_BE_DYED: "Not to be dyed",
@@ -66,12 +66,9 @@ export default async function YarnDetailPage({ params }: { params: { id: string 
   }
 
   try {
-    // Extract the ID parameter first
-    const id = params.id;
-
     const yarn = await prisma.yarn.findUnique({
       where: {
-        id: id,
+        id: params.id,
         userId: session.user.id,
       },
       include: {

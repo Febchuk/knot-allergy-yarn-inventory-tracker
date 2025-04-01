@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft } from "lucide-react";
+import { SearchableMultiSelect } from "@/components/ui/searchable-multi-select";
 
 // We'll use a similar schema as the one in lib/schemas/yarn.ts but for client-side validation
 const DyeStatus = {
@@ -38,6 +39,7 @@ const yarnSchema = z.object({
     quantity: z.number().int().positive("Quantity must be positive"),
   })),
   tags: z.string().optional(),
+  projectIds: z.array(z.string()).default([]),
 });
 
 type YarnFormValues = z.infer<typeof yarnSchema>;
@@ -47,11 +49,19 @@ type YarnOrganizationType = {
   name: string;
 };
 
+type Project = {
+  id: string;
+  name: string;
+  status: string;
+};
+
 export default function EditYarnPage({ params }: { params: { id: string } }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [organizationTypes, setOrganizationTypes] = useState<YarnOrganizationType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [projectsLoading, setProjectsLoading] = useState(true);
 
   const { register, handleSubmit, setValue, watch, formState: { errors }, reset } = useForm<YarnFormValues>({
     resolver: zodResolver(yarnSchema),
@@ -65,15 +75,23 @@ export default function EditYarnPage({ params }: { params: { id: string } }) {
   useEffect(() => {
     const fetchData = async () => {
       setIsLoading(true);
+      setProjectsLoading(true);
       try {
         // Fetch organization types
-        const typesResponse = await fetch("/api/yarn-organization-types");
+        const typesResponse = await fetch("/api/yarns-organization-types");
         if (!typesResponse.ok) throw new Error("Failed to fetch organization types");
         const typesData = await typesResponse.json();
         setOrganizationTypes(typesData);
 
+        // Fetch all projects
+        const projectsResponse = await fetch("/api/projects");
+        if (!projectsResponse.ok) throw new Error("Failed to fetch projects");
+        const projectsData = await projectsResponse.json();
+        setProjects(projectsData.projects || []);
+        setProjectsLoading(false);
+
         // Fetch yarn data
-        const yarnResponse = await fetch(`/api/yarn/${params.id}`);
+        const yarnResponse = await fetch(`/api/yarns/${params.id}`);
         if (!yarnResponse.ok) {
           if (yarnResponse.status === 404) {
             toast.error("Yarn not found");
@@ -84,6 +102,12 @@ export default function EditYarnPage({ params }: { params: { id: string } }) {
         }
         
         const yarnData = await yarnResponse.json();
+        
+        // Debug yarn data
+        console.log("Yarn data received:", JSON.stringify({
+          projects: yarnData.projects,
+          projectIds: yarnData.projects?.map((project: { id: string }) => project.id) || []
+        }));
         
         // Convert the data to the form format
         reset({
@@ -103,7 +127,13 @@ export default function EditYarnPage({ params }: { params: { id: string } }) {
             quantity: org.quantity,
           })) || [],
           tags: yarnData.tags?.map((tag: { name: string }) => tag.name).join(", "),
+          projectIds: yarnData.projects?.map((project: { id: string }) => project.id) || [],
         });
+        
+        // Debug after reset
+        console.log("Form values after reset:", JSON.stringify({
+          projectIds: watch("projectIds")
+        }));
       } catch (error) {
         console.error("Error fetching data:", error);
         toast.error("Failed to load yarn data");
@@ -114,6 +144,14 @@ export default function EditYarnPage({ params }: { params: { id: string } }) {
 
     fetchData();
   }, [params.id, reset, router]);
+
+  // Add effect to explicitly set projectIds after loading
+  useEffect(() => {
+    if (!isLoading && !projectsLoading) {
+      const currentProjectIds = watch("projectIds");
+      console.log("Setting projectIds in effect:", currentProjectIds);
+    }
+  }, [isLoading, projectsLoading, watch]);
 
   // Handle color arrow notation automatically
   const handleColorChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -151,15 +189,18 @@ export default function EditYarnPage({ params }: { params: { id: string } }) {
       const tagsArray = data.tags?.split(",").map(tag => tag.trim()).filter(Boolean) || [];
       
       // Prepare data for API
-      const { organizationData, ...rest } = data;
+      const { organizationData, projectIds, ...rest } = data;
       
       const apiData = {
         ...rest,
         tags: tagsArray,
         organization: organizationData,
+        projectIds: projectIds || [],
       };
 
-      const response = await fetch(`/api/yarn/${params.id}`, {
+      console.log("Sending data to API:", JSON.stringify(apiData));
+
+      const response = await fetch(`/api/yarns/${params.id}`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -167,13 +208,17 @@ export default function EditYarnPage({ params }: { params: { id: string } }) {
         body: JSON.stringify(apiData),
       });
 
+      const responseData = await response.json();
+      console.log("Response from API:", JSON.stringify(responseData));
+
       if (!response.ok) {
         throw new Error("Failed to update yarn");
       }
 
       toast.success("Yarn updated successfully");
-      router.push(`/dashboard/yarns/${params.id}`);
-      router.refresh();
+      
+      // Force a hard reload to ensure the data is refreshed
+      window.location.href = `/dashboard/yarns/${params.id}`;
     } catch (error) {
       toast.error("Something went wrong");
       console.error(error);
@@ -402,6 +447,63 @@ export default function EditYarnPage({ params }: { params: { id: string } }) {
                 {...register("tags")}
                 placeholder="Enter tags (comma separated)"
               />
+            </div>
+            <div className="space-y-4">
+              <Label>Associated Projects</Label>
+              {projectsLoading ? (
+                <div className="text-center py-2">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto"></div>
+                  <p className="mt-2 text-sm text-muted-foreground">Loading projects...</p>
+                </div>
+              ) : projects.length > 0 ? (
+                <SearchableMultiSelect
+                  options={projects.map(project => ({
+                    label: project.name,
+                    value: project.id,
+                    description: `Status: ${project.status.replace('_', ' ').charAt(0).toUpperCase() + project.status.replace('_', ' ').slice(1)}`
+                  }))}
+                  selected={watch("projectIds") || []}
+                  onChange={(values) => {
+                    console.log("SearchableMultiSelect onChange called with:", JSON.stringify(values));
+                    setValue("projectIds", values);
+                    
+                    // Force immediate update
+                    const apiData = {
+                      projectIds: values
+                    };
+                    
+                    console.log("Sending immediate update with:", JSON.stringify(apiData));
+                    
+                    // Update projects immediately
+                    fetch(`/api/yarns/${params.id}`, {
+                      method: "PATCH",
+                      headers: {
+                        "Content-Type": "application/json",
+                      },
+                      body: JSON.stringify(apiData),
+                    })
+                      .then(response => response.json())
+                      .then(data => {
+                        console.log("Project update response:", JSON.stringify(data));
+                        toast.success("Project associations updated");
+                      })
+                      .catch(error => {
+                        console.error("Error updating projects:", error);
+                        toast.error("Failed to update project associations");
+                      });
+                  }}
+                  placeholder="Select projects..."
+                  emptyMessage="No projects found"
+                  loading={projectsLoading}
+                />
+              ) : (
+                <div className="text-center py-4 border rounded-md">
+                  <p className="text-sm text-muted-foreground">No projects available</p>
+                  <Link href="/dashboard/projects/new" className="text-sm text-primary hover:underline mt-2 inline-block">
+                    Create a project
+                  </Link>
+                </div>
+              )}
             </div>
             <div className="flex justify-end space-x-4 pt-4">
               <Link href={`/dashboard/yarns/${params.id}`}>

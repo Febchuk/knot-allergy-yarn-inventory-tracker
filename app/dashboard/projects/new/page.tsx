@@ -13,9 +13,9 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CheckboxGroup, CheckboxItem } from "@/components/ui/checkbox-group";
 import { ArrowLeft } from "lucide-react";
 import { useEffect } from "react";
+import { SearchableMultiSelect } from "@/components/ui/searchable-multi-select";
 
 // Project schema for form validation
 const projectSchema = z.object({
@@ -40,7 +40,7 @@ export default function NewProjectPage() {
   const [yarns, setYarns] = useState<Yarn[]>([]);
   const [yarnsLoading, setYarnsLoading] = useState(true);
   
-  const { register, handleSubmit, setValue, formState: { errors } } = useForm<ProjectFormValues>({
+  const { register, handleSubmit, setValue, formState: { errors }, getValues } = useForm<ProjectFormValues>({
     resolver: zodResolver(projectSchema),
     defaultValues: {
       status: "planned",
@@ -165,43 +165,33 @@ export default function NewProjectPage() {
               </Select>
             </div>
             
-            <div className="space-y-2">
-              <Label>Yarns for this Project</Label>
+            <div className="space-y-4">
+              <Label>Select Yarns</Label>
               {yarnsLoading ? (
-                <div className="p-4 text-center">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+                <div className="text-center py-2">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto"></div>
                   <p className="mt-2 text-sm text-muted-foreground">Loading yarns...</p>
                 </div>
               ) : yarns.length > 0 ? (
-                <div className="border rounded-md p-4 space-y-2 max-h-60 overflow-y-auto">
-                  <CheckboxGroup
-                    onValueChange={(values: string[]) => setValue("yarnIds", values)}
-                  >
-                    {yarns.map((yarn) => (
-                      <div key={yarn.id} className="flex items-start space-x-2">
-                        <CheckboxItem 
-                          id={`yarn-${yarn.id}`}
-                          value={yarn.id}
-                        />
-                        <div>
-                          <Label 
-                            htmlFor={`yarn-${yarn.id}`}
-                            className="font-medium cursor-pointer"
-                          >
-                            {yarn.brand} {yarn.productLine}
-                          </Label>
-                          {yarn.currColor && (
-                            <p className="text-sm text-muted-foreground">Color: {yarn.currColor}</p>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </CheckboxGroup>
-                </div>
+                <SearchableMultiSelect
+                  options={yarns.map(yarn => ({
+                    label: `${yarn.brand} ${yarn.productLine}`,
+                    value: yarn.id,
+                    description: yarn.currColor ? `Color: ${yarn.currColor}` : undefined
+                  }))}
+                  selected={getValues("yarnIds") || []}
+                  onChange={(values) => setValue("yarnIds", values)}
+                  placeholder="Select yarns..."
+                  emptyMessage="No yarns found"
+                  loading={yarnsLoading}
+                />
               ) : (
-                <p className="text-sm text-muted-foreground p-2 border rounded-md">
-                  No yarns available. <Link href="/dashboard/yarns/new" className="text-primary hover:underline">Add some yarns first</Link>.
-                </p>
+                <div className="text-center py-4 border rounded-md">
+                  <p className="text-sm text-muted-foreground">No yarns available</p>
+                  <Link href="/dashboard/yarns/new" className="text-sm text-primary hover:underline mt-2 inline-block">
+                    Add a yarn
+                  </Link>
+                </div>
               )}
             </div>
             
